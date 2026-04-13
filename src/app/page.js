@@ -53,6 +53,18 @@ export default function TradingOS() {
   useEffect(() => { setPositions(loadPositions()); }, []);
 
   // ── Auto-sync during market hours ───────────────
+  // ── Prices ──────────────────────────────────────
+  const syncPrices = useCallback(async () => {
+    const tickers = [...new Set([...positions.map(p => p.ticker), ...MY_TICKERS])].join(',');
+    setLiveStatus('syncing');
+    try {
+      const res = await fetch(`/api/prices?tickers=${tickers}`);
+      const data = await res.json();
+      if (data.prices) { setPrices(data.prices); setLiveStatus('live'); }
+      else setLiveStatus('offline');
+    } catch { setLiveStatus('offline'); }
+  }, [positions]);
+
   const isMarketOpen = () => {
     const now = new Date();
     const utc = now.getTime() + now.getTimezoneOffset() * 60000;
@@ -81,17 +93,7 @@ export default function TradingOS() {
     return () => clearInterval(interval);
   }, [syncPrices]);
 
-  // ── Prices ──────────────────────────────────────
-  const syncPrices = useCallback(async () => {
-    const tickers = [...new Set([...positions.map(p => p.ticker), ...MY_TICKERS])].join(',');
-    setLiveStatus('syncing');
-    try {
-      const res = await fetch(`/api/prices?tickers=${tickers}`);
-      const data = await res.json();
-      if (data.prices) { setPrices(data.prices); setLiveStatus('live'); }
-      else setLiveStatus('offline');
-    } catch { setLiveStatus('offline'); }
-  }, [positions]);
+
 
 
 
