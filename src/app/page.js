@@ -203,7 +203,7 @@ export default function TradingOS() {
 
   // Run migration engine whenever prices or positions update
   useEffect(() => {
-    if (Object.keys(prices).length > 0 && positions.length > 0) {
+    if (positions.length > 0) {
       runMigrationEngine(positions, prices);
     }
   }, [prices, positions]);
