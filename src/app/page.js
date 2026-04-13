@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 
-const VERSION = 'v1.0';
+const VERSION = 'v1.1';
 const STORE = 'engine_os_v1';
 const CATALYSTS = [
   { date: '2026-04-28', ticker: 'META',  desc: 'Q1 Earnings',    engine: 2 },
@@ -427,7 +427,14 @@ export default function TradingOS() {
             <div style={s.liveDot(liveStatus)}></div>
             <span>{liveStatus==='live'?'Live — Massive':liveStatus==='syncing'?'Syncing...':'Offline'}</span>
           </div>
-          {marketStatus && <span style={{fontSize:11,color:'#B05A00',background:'#FDF3E8',border:'1px solid #EEC49A',borderRadius:4,padding:'3px 8px'}}>{marketStatus}</span>}
+          <span style={{
+            fontSize:11, fontWeight:600, padding:'3px 10px', borderRadius:4,
+            background: liveStatus==='live' ? '#ECF8F4' : marketStatus==='' ? '#ECF8F4' : '#FDF3E8',
+            color: liveStatus==='live' ? '#0A7A52' : marketStatus==='' ? '#0A7A52' : '#B05A00',
+            border: `1px solid ${liveStatus==='live' ? '#A8DFC9' : marketStatus==='' ? '#A8DFC9' : '#EEC49A'}`
+          }}>
+            {liveStatus==='live' ? '● Market Open' : marketStatus ? '○ ' + marketStatus : '○ Checking...'}
+          </span>
           <button style={s.syncBtn} onClick={syncPrices}>↻ Sync All</button>
         </div>
       </div>
