@@ -1,9 +1,16 @@
 const fs = require('fs');
 const path = require('path');
 
-// __dirname is /vercel/path0/scripts — go up one level to reach project root
-const pagePath = path.join(__dirname, '..', 'src', 'app', 'page.js');
-let content = fs.readFileSync(pagePath, 'utf8');
+// process.cwd() always returns project root on Vercel
+const pagePath = path.join(process.cwd(), 'src', 'app', 'page.js');
+
+let content;
+try {
+  content = fs.readFileSync(pagePath, 'utf8');
+} catch(e) {
+  console.log('⚠ Could not read page.js at:', pagePath, '— skipping version bump');
+  process.exit(0);
+}
 
 const match = content.match(/const VERSION = 'v(\d+)\.(\d+)\.(\d+)'/);
 if (match) {
@@ -13,14 +20,5 @@ if (match) {
   fs.writeFileSync(pagePath, content);
   console.log(`✓ Version bumped to ${newVersion}`);
 } else {
-  const match2 = content.match(/const VERSION = 'v(\d+)\.(\d+)'/);
-  if (match2) {
-    const [, major, minor] = match2;
-    const newVersion = `v${major}.${minor}.1`;
-    content = content.replace(`const VERSION = 'v${major}.${minor}'`, `const VERSION = '${newVersion}'`);
-    fs.writeFileSync(pagePath, content);
-    console.log(`✓ Version bumped to ${newVersion}`);
-  } else {
-    console.log('⚠ No version found in page.js — skipping bump');
-  }
+  console.log('⚠ No semver VERSION found — skipping bump');
 }
