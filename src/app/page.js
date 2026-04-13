@@ -43,13 +43,6 @@ export default function TradingOS() {
   const [scorerTicker, setScorerTicker] = useState('');
   const [scoring, setScoring] = useState(false);
   const [scoreResult, setScoreResult] = useState(null);
-  // Intel
-  const [news, setNews] = useState([]);
-  const [newsFilter, setNewsFilter] = useState('all');
-  const [loadingNews, setLoadingNews] = useState(false);
-  const [riskData, setRiskData] = useState(null);
-  const [loadingRisk, setLoadingRisk] = useState(false);
-  const [intelUpdated, setIntelUpdated] = useState('');
 
   useEffect(() => { setPositions(loadPositions()); }, []);
 
@@ -121,32 +114,6 @@ export default function TradingOS() {
       setScoreResult(data.result);
     } catch { setScoreResult({ error: true }); }
     setScoring(false);
-  };
-
-  // ── News ─────────────────────────────────────────
-  const fetchNews = async (filter = newsFilter) => {
-    setLoadingNews(true); setNews([]);
-    try {
-      const res = await fetch('/api/news', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ filter }) });
-      const data = await res.json();
-      setNews(data.news || []);
-      setIntelUpdated('Updated ' + new Date().toLocaleTimeString('en-US', { hour:'2-digit', minute:'2-digit' }));
-    } catch {}
-    setLoadingNews(false);
-  };
-
-  // ── Risk ─────────────────────────────────────────
-  const fetchRisk = async () => {
-    setLoadingRisk(true); setRiskData(null);
-    const portfolio = positions.length
-      ? positions.map(p => `${p.ticker}(E${p.engine},${fmtPct(((lp(p.ticker)||p.price)-p.cost)/p.cost*100)})`).join(', ')
-      : 'No positions';
-    try {
-      const res = await fetch('/api/risk', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ portfolio }) });
-      const data = await res.json();
-      setRiskData(data.result);
-    } catch {}
-    setLoadingRisk(false);
   };
 
   // ── Summary totals ───────────────────────────────
@@ -229,11 +196,8 @@ export default function TradingOS() {
     // Scorer
     scorerLayout: { display:'grid', gridTemplateColumns:'280px 1fr', gap:16 },
     scorerRight: { background:'#fff', border:'1px solid #E3E7EF', borderRadius:10, padding:20, minHeight:400 },
-    // Intel
-    intelGrid: { display:'grid', gridTemplateColumns:'300px 1fr', gap:16 },
     newsCard: { background:'#fff', border:'1px solid #E3E7EF', borderRadius:8, padding:'12px 14px', marginBottom:8, cursor:'pointer' },
     sentBadge: (s) => ({ fontSize:10, fontWeight:600, padding:'2px 7px', borderRadius:4, background: s==='positive'?'#ECF8F4':s==='negative'?'#FDEEEE':'#F7F8FA', color: s==='positive'?'#0A7A52':s==='negative'?'#C0302A':'#6B7898' }),
-    riskCircle: (score) => ({ width:80, height:80, borderRadius:'50%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', flexShrink:0, border:`3px solid ${score>=70?'#C0302A':score>=40?'#B05A00':'#0A7A52'}`, background: score>=70?'#FDEEEE':score>=40?'#FDF3E8':'#ECF8F4' }),
     // Modal
     modalBg: { position:'fixed', inset:0, background:'rgba(0,0,0,.3)', zIndex:200, display:'flex', alignItems:'center', justifyContent:'center' },
     modal: { background:'#fff', border:'1px solid #C8CFDD', borderRadius:12, padding:24, width:400, maxWidth:'95vw' },
@@ -243,8 +207,6 @@ export default function TradingOS() {
     btnPrimary: { padding:'8px 18px', borderRadius:7, fontSize:13, fontWeight:500, cursor:'pointer', border:'none', fontFamily:"'IBM Plex Sans',sans-serif", background:'#1455C0', color:'#fff' },
     btnGhost: { padding:'8px 18px', borderRadius:7, fontSize:13, fontWeight:500, cursor:'pointer', fontFamily:"'IBM Plex Sans',sans-serif", background:'#F7F8FA', border:'1px solid #E3E7EF', color:'#6B7898' },
     fetchBtn: { background:'#EBF1FD', border:'1px solid #9DBDEE', borderRadius:6, padding:'7px 12px', fontSize:12, fontWeight:500, color:'#1455C0', cursor:'pointer', fontFamily:"'IBM Plex Sans',sans-serif", whiteSpace:'nowrap' },
-    intelBtn: { background:'#1455C0', color:'#fff', border:'none', borderRadius:6, padding:'6px 14px', fontSize:12, fontWeight:500, cursor:'pointer', fontFamily:"'IBM Plex Sans',sans-serif" },
-    filterBtn: (active) => ({ background: active?'#EBF1FD':'#F7F8FA', border:`1px solid ${active?'#9DBDEE':'#E3E7EF'}`, borderRadius:5, padding:'3px 10px', fontSize:11, cursor:'pointer', color: active?'#1455C0':'#6B7898', fontFamily:"'IBM Plex Sans',sans-serif" }),
     qBtn: { background:'#F7F8FA', border:'1px solid #E3E7EF', borderRadius:5, padding:'4px 10px', fontSize:12, fontFamily:"'IBM Plex Mono',monospace", fontWeight:500, cursor:'pointer', color:'#17202E' },
     scoreGoBtn: { background:'#1455C0', color:'#fff', border:'none', borderRadius:6, padding:'8px 16px', fontSize:13, fontWeight:500, cursor:'pointer', fontFamily:"'IBM Plex Sans',sans-serif" },
   };
@@ -273,9 +235,9 @@ export default function TradingOS() {
           <span style={s.vBadge}>{VERSION}</span>
         </div>
         <div style={s.navTabs}>
-          {['dashboard','scorecard','scorer','intel','protocol'].map(t => (
+          {['dashboard','scorecard','scorer','protocol'].map(t => (
             <button key={t} style={s.navTab(tab===t)} onClick={() => setTab(t)}>
-              {t==='dashboard'?'Dashboard':t==='scorecard'?'Scorecard':t==='scorer'?'Stock Scorer':t==='intel'?'Market Intel':'Protocol'}
+              {t==='dashboard'?'Dashboard':t==='scorecard'?'Scorecard':t==='scorer'?'Stock Scorer':'Protocol'}
             </button>
           ))}
         </div>
@@ -578,110 +540,6 @@ export default function TradingOS() {
                   </div>
                 );
               })()}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ══ MARKET INTEL ══ */}
-      {tab === 'intel' && (
-        <div style={s.page}>
-          <div style={s.intelGrid}>
-            {/* Left */}
-            <div>
-              <div style={{background:'#fff',border:'1px solid #E3E7EF',borderRadius:10,padding:18,marginBottom:12}}>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-                  <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:'.08em',color:'#A0ABBC',fontWeight:500}}>Risk Score</div>
-                  <button style={s.intelBtn} onClick={fetchRisk} disabled={loadingRisk}>{loadingRisk?'Analyzing...':'Analyze Market ↗'}</button>
-                </div>
-                {!riskData && !loadingRisk && <div style={{textAlign:'center',padding:'24px 0',color:'#A0ABBC',fontSize:12}}>Click Analyze Market to get live risk score</div>}
-                {loadingRisk && <div style={{textAlign:'center',padding:'24px 0',color:'#6B7898',fontSize:13}}><div style={{fontSize:18,letterSpacing:3,marginBottom:8}}>···</div>Claude is searching market data...</div>}
-                {riskData && (
-                  <div>
-                    <div style={{display:'flex',gap:14,alignItems:'flex-start',marginBottom:14}}>
-                      <div style={s.riskCircle(riskData.risk_score||50)}>
-                        <div style={{fontSize:26,fontWeight:700,fontFamily:"'IBM Plex Mono',monospace",lineHeight:1.1,color:riskData.risk_score>=70?'#C0302A':riskData.risk_score>=40?'#B05A00':'#0A7A52'}}>{riskData.risk_score}</div>
-                        <div style={{fontSize:9,fontWeight:700,textTransform:'uppercase',letterSpacing:'.06em',color:riskData.risk_score>=70?'#C0302A':riskData.risk_score>=40?'#B05A00':'#0A7A52'}}>{riskData.risk_label}</div>
-                      </div>
-                      <div style={{flex:1}}>
-                        <div style={{fontSize:14,fontWeight:600,marginBottom:3}}>{riskData.market_sentiment}</div>
-                        <div style={{fontSize:11,color:'#6B7898'}}>VIX: {riskData.vix} · Nasdaq: {riskData.nasdaq_today} · S&P: {riskData.sp500_today}</div>
-                        <div style={{fontSize:12,color:'#6B7898',marginTop:6,lineHeight:1.55}}>{riskData.summary}</div>
-                      </div>
-                    </div>
-                    {(riskData.factors||[]).map((f,i)=>(
-                      <div key={i} style={{display:'flex',alignItems:'flex-start',gap:8,padding:'7px 0',borderBottom:'.5px solid #E3E7EF',fontSize:12}}>
-                        <div style={{width:7,height:7,borderRadius:'50%',flexShrink:0,marginTop:4,background:f.impact==='negative'?'#C0302A':f.impact==='positive'?'#0A7A52':'#A0ABBC'}}></div>
-                        <div style={{flex:1,color:'#6B7898',lineHeight:1.45}}><strong style={{color:'#17202E'}}>{f.factor}</strong>{f.detail?' — '+f.detail:''}</div>
-                        <div style={{fontSize:10,fontWeight:600,padding:'1px 6px',borderRadius:3,background:f.weight==='high'?'#FDEEEE':f.weight==='medium'?'#FDF3E8':'#ECF8F4',color:f.weight==='high'?'#C0302A':f.weight==='medium'?'#B05A00':'#0A7A52',flexShrink:0}}>{f.weight}</div>
-                      </div>
-                    ))}
-                    {riskData.opportunities?.length>0 && (
-                      <div style={{background:'#F3FBF8',border:'1px solid #A8DFC9',borderRadius:7,padding:'10px 12px',marginTop:10}}>
-                        <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.07em',color:'#0A7A52',fontWeight:600,marginBottom:5}}>Opportunities</div>
-                        {riskData.opportunities.map((o,i)=><div key={i} style={{fontSize:12,color:'#0A7A52',padding:'2px 0'}}>+ {o}</div>)}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Market indicators */}
-              <div style={{background:'#fff',border:'1px solid #E3E7EF',borderRadius:10,padding:14,marginBottom:12}}>
-                <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:'.08em',color:'#A0ABBC',fontWeight:500,marginBottom:10}}>Live Indicators</div>
-                <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8}}>
-                  {['NVDA','META','MSFT'].map(t=>(
-                    <div key={t} style={{background:'#F7F8FA',border:'1px solid #E3E7EF',borderRadius:7,padding:10}}>
-                      <div style={{fontSize:10,textTransform:'uppercase',letterSpacing:'.07em',color:'#A0ABBC',fontWeight:500,marginBottom:3}}>{t}</div>
-                      <div style={{fontSize:15,fontWeight:600,fontFamily:"'IBM Plex Mono',monospace"}}>{prices[t]?'$'+prices[t].price.toFixed(2):'—'}</div>
-                      {prices[t] && <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:prices[t].change>=0?'#0A7A52':'#C0302A'}}>{prices[t].change>=0?'+':''}{prices[t].change.toFixed(2)}%</div>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Portfolio risks */}
-              <div style={{background:'#fff',border:'1px solid #E3E7EF',borderRadius:10,padding:14}}>
-                <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:'.08em',color:'#A0ABBC',fontWeight:500,marginBottom:10}}>Portfolio Risk Flags</div>
-                {portRisks().map((r,i)=>(
-                  <div key={i} style={{fontSize:12,color:'#6B7898',padding:'6px 0',borderBottom:'.5px solid #E3E7EF'}}>{r}</div>
-                ))}
-              </div>
-            </div>
-
-            {/* Right - News */}
-            <div>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
-                <div style={{fontSize:13,fontWeight:600}}>Market News</div>
-                <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                  <span style={{fontSize:11,color:'#A0ABBC'}}>{intelUpdated}</span>
-                  <button style={s.intelBtn} onClick={() => fetchNews(newsFilter)} disabled={loadingNews}>{loadingNews?'Loading...':'↻ Refresh News'}</button>
-                </div>
-              </div>
-              <div style={{display:'flex',gap:5,marginBottom:12}}>
-                {['all','positive','negative'].map(f=>(
-                  <button key={f} style={s.filterBtn(newsFilter===f)} onClick={()=>{setNewsFilter(f);fetchNews(f);}}>
-                    {f==='all'?'All':f==='positive'?'Bullish':'Risk'}
-                  </button>
-                ))}
-              </div>
-              {loadingNews && <div style={{textAlign:'center',padding:32,color:'#6B7898',fontSize:13}}><div style={{fontSize:18,letterSpacing:3,marginBottom:8}}>···</div>Claude is searching for latest news...</div>}
-              {!loadingNews && news.length===0 && <div style={{textAlign:'center',padding:32,color:'#A0ABBC',fontSize:12}}>Click "Refresh News" to load latest market news</div>}
-              {news.map((n,i)=>(
-                <div key={i} style={s.newsCard} onClick={()=>n.url&&window.open(n.url,'_blank')}>
-                  <div style={{display:'flex',justifyContent:'space-between',gap:10,marginBottom:5,alignItems:'flex-start'}}>
-                    <div style={{fontSize:13,fontWeight:500,lineHeight:1.4,flex:1}}>{n.title}</div>
-                    <span style={s.sentBadge(n.sentiment)}>{n.sentiment==='positive'?'Bullish':n.sentiment==='negative'?'Risk':'Neutral'}</span>
-                  </div>
-                  <div style={{fontSize:11,color:'#A0ABBC'}}>{n.source}</div>
-                  {n.summary && <div style={{fontSize:11,color:'#A0ABBC',marginTop:4,lineHeight:1.45}}>{n.summary}</div>}
-                  {n.tickers?.length>0 && (
-                    <div style={{display:'flex',gap:4,marginTop:6,flexWrap:'wrap'}}>
-                      {n.tickers.filter(t=>MY_TICKERS.includes(t)).map(t=><span key={t} style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",fontWeight:600,padding:'1px 6px',borderRadius:3,background:'#EBF1FD',color:'#1455C0'}}>{t}</span>)}
-                    </div>
-                  )}
-                </div>
-              ))}
             </div>
           </div>
         </div>
