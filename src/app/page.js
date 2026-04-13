@@ -44,6 +44,10 @@ export default function TradingOS() {
   const [scorerTicker, setScorerTicker] = useState('');
   const [scoring, setScoring] = useState(false);
   const [scoreResult, setScoreResult] = useState(null);
+  // ── Migration suggestions ────────────────────────
+  const [suggestions, setSuggestions] = useState({});
+  const [migrationModal, setMigrationModal] = useState(null); // {pos, idx, suggestion, explanation}
+  const [loadingExplanation, setLoadingExplanation] = useState(false);
 
   useEffect(() => { setPositions(loadPositions()); }, []);
 
@@ -90,7 +94,116 @@ export default function TradingOS() {
     } catch { setLiveStatus('offline'); }
   }, [positions]);
 
+  // Run migration engine whenever prices or positions update
+  useEffect(() => {
+    if (Object.keys(prices).length > 0 && positions.length > 0) {
+      runMigrationEngine(positions, prices);
+    }
+  }, [prices, positions]);
+
   const lp = ticker => prices[ticker]?.price || null;
+
+  // ── Migration rule engine ────────────────────────
+  const runMigrationEngine = (currentPositions, currentPrices) => {
+    const newSuggestions = {};
+    const today = new Date();
+
+    currentPositions.forEach((p, idx) => {
+      const price = currentPrices[p.ticker]?.price || p.price;
+      const pct = ((price - p.cost) / p.cost) * 100;
+      const catalyst = CATALYSTS.find(c => c.ticker === p.ticker);
+      const daysToEarnings = catalyst ? Math.round((new Date(catalyst.date) - today) / 86400000) : null;
+
+      let suggestion = null;
+
+      if (p.engine === 1) {
+        // E1 → E2: earnings approaching
+        if (daysToEarnings !== null && daysToEarnings >= 0 && daysToEarnings <= 21) {
+          suggestion = {
+            type: 'migrate',
+            from: 1, to: 2,
+            label: `E1 → E2`,
+            reason: `${p.ticker} earnings in ${daysToEarnings}d — enter swing position`,
+            urgency: daysToEarnings <= 7 ? 'high' : 'med',
+          };
+        }
+        // E1 → E2: up 25%+ harvest signal
+        else if (pct >= 25) {
+          suggestion = {
+            type: 'migrate',
+            from: 1, to: 2,
+            label: `E1 → E2`,
+            reason: `Up ${pct.toFixed(0)}% — harvest partial gains, keep smaller position`,
+            urgency: pct >= 40 ? 'high' : 'med',
+          };
+        }
+        // Stop warning
+        else if (pct <= -13) {
+          suggestion = {
+            type: 'warn',
+            label: 'Near Stop',
+            reason: `Down ${Math.abs(pct).toFixed(0)}% — approaching 15% stop loss`,
+            urgency: 'high',
+          };
+        }
+      }
+
+      else if (p.engine === 2) {
+        // E2 → E1: earnings passed, thesis deepened
+        if (daysToEarnings !== null && daysToEarnings < 0 && daysToEarnings >= -7 && pct > 5) {
+          suggestion = {
+            type: 'migrate',
+            from: 2, to: 1,
+            label: `E2 → E1`,
+            reason: `Earnings passed +${pct.toFixed(0)}% — thesis may have deepened, consider long hold`,
+            urgency: 'med',
+          };
+        }
+        // E2 → E3: earnings tomorrow
+        else if (daysToEarnings !== null && daysToEarnings >= 0 && daysToEarnings <= 1) {
+          suggestion = {
+            type: 'migrate',
+            from: 2, to: 3,
+            label: `E2 → E3`,
+            reason: `Earnings ${daysToEarnings === 0 ? 'today' : 'tomorrow'} — flip the gap`,
+            urgency: 'high',
+          };
+        }
+        // Exit signal: up 20%+ pre-earnings, take profits
+        else if (pct >= 20 && daysToEarnings !== null && daysToEarnings <= 3) {
+          suggestion = {
+            type: 'action',
+            label: 'Take 50%',
+            reason: `Up ${pct.toFixed(0)}% with earnings in ${daysToEarnings}d — take 50% profit now`,
+            urgency: 'high',
+          };
+        }
+        // Stop warning
+        else if (pct <= -8) {
+          suggestion = {
+            type: 'warn',
+            label: 'Near Stop',
+            reason: `Down ${Math.abs(pct).toFixed(0)}% — approaching 10% stop loss`,
+            urgency: 'high',
+          };
+        }
+      }
+
+      else if (p.engine === 3) {
+        // E3 should never be held overnight — flag if added
+        suggestion = {
+          type: 'warn',
+          label: 'Same-day only',
+          reason: 'Engine 3 positions must exit by 2:30 PM EST — never hold overnight',
+          urgency: 'high',
+        };
+      }
+
+      if (suggestion) newSuggestions[idx] = suggestion;
+    });
+
+    setSuggestions(newSuggestions);
+  };
 
   // ── Fetch modal price ────────────────────────────
   const fetchModalPrice = async () => {
@@ -104,6 +217,39 @@ export default function TradingOS() {
       else setFetchedPrice({ error: 'Not found' });
     } catch { setFetchedPrice({ error: 'Error' }); }
     setFetchingPrice(false);
+  };
+
+  // ── Migration explanation via Claude ───────────────
+  const fetchExplanation = async (pos, idx, suggestion) => {
+    setLoadingExplanation(true);
+    setMigrationModal({ pos, idx, suggestion, explanation: null });
+    try {
+      const price = prices[pos.ticker]?.price || pos.price;
+      const pct = ((price - pos.cost) / pos.cost * 100).toFixed(1);
+      const res = await fetch('/api/score', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ticker: pos.ticker, liveData: prices[pos.ticker] || null })
+      });
+      const data = await res.json();
+      const explanation = data.result?.summary || suggestion.reason;
+      setMigrationModal(m => ({ ...m, explanation, scoreResult: data.result }));
+    } catch {
+      setMigrationModal(m => ({ ...m, explanation: suggestion.reason }));
+    }
+    setLoadingExplanation(false);
+  };
+
+  const confirmMigration = () => {
+    if (!migrationModal) return;
+    const { idx, suggestion } = migrationModal;
+    if (suggestion.type === 'migrate') {
+      const next = positions.map((p, i) => i === idx ? { ...p, engine: suggestion.to } : p);
+      setPositions(next);
+      savePositions(next);
+      setSuggestions(s => { const n = {...s}; delete n[idx]; return n; });
+    }
+    setMigrationModal(null);
   };
 
   // ── Positions ────────────────────────────────────
@@ -386,12 +532,33 @@ export default function TradingOS() {
                       const chg = prices[p.ticker];
                       const idx = positions.indexOf(p);
                       return (
-                        <div key={i} style={s.posItem}>
-                          <span style={{fontFamily:"'IBM Plex Mono',monospace",fontWeight:600,width:42}}>{p.ticker}</span>
-                          <span style={{color:'#6B7898',flex:1,fontSize:11}}>{p.shares}sh · ${p.cost.toFixed(0)}</span>
-                          <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11}}>${price.toFixed(2)} {chg && <span style={{color:chg.change>=0?'#0A7A52':'#C0302A',fontSize:10}}>{chg.change>=0?'+':''}{chg.change.toFixed(1)}%</span>}</span>
-                          <span style={{fontFamily:"'IBM Plex Mono',monospace",fontWeight:500,fontSize:11,color:pnl>=0?'#0A7A52':'#C0302A'}}>{pnl>=0?'+':''}{fmt(pnl)} ({fmtPct(pct)})</span>
-                          <button style={{background:'none',border:'none',cursor:'pointer',color:'#A0ABBC',fontSize:11,padding:'2px 4px'}} onClick={() => removePos(idx)}>✕</button>
+                        <div key={i} style={{...s.posItem, flexWrap:'wrap', gap:6}}>
+                          <div style={{display:'flex',alignItems:'center',gap:6,width:'100%'}}>
+                            <span style={{fontFamily:"'IBM Plex Mono',monospace",fontWeight:600,width:42}}>{p.ticker}</span>
+                            <span style={{color:'#6B7898',flex:1,fontSize:11}}>{p.shares}sh · ${p.cost.toFixed(0)}</span>
+                            <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:11}}>${price.toFixed(2)} {chg && <span style={{color:chg.change>=0?'#0A7A52':'#C0302A',fontSize:10}}>{chg.change>=0?'+':''}{chg.change.toFixed(1)}%</span>}</span>
+                            <span style={{fontFamily:"'IBM Plex Mono',monospace",fontWeight:500,fontSize:11,color:pnl>=0?'#0A7A52':'#C0302A'}}>{pnl>=0?'+':''}{fmt(pnl)} ({fmtPct(pct)})</span>
+                            <button style={{background:'none',border:'none',cursor:'pointer',color:'#A0ABBC',fontSize:11,padding:'2px 4px'}} onClick={() => removePos(idx)}>✕</button>
+                          </div>
+                          {suggestions[idx] && (
+                            <div style={{display:'flex',alignItems:'center',gap:6,width:'100%',paddingLeft:0}}>
+                              <div style={{
+                                fontSize:10,fontWeight:600,padding:'2px 7px',borderRadius:4,flexShrink:0,
+                                background:suggestions[idx].urgency==='high'?'#FDEEEE':suggestions[idx].type==='warn'?'#FDF3E8':'#EBF1FD',
+                                color:suggestions[idx].urgency==='high'?'#C0302A':suggestions[idx].type==='warn'?'#B05A00':'#1455C0',
+                              }}>{suggestions[idx].label}</div>
+                              <div style={{fontSize:11,color:'#6B7898',flex:1,lineHeight:1.3}}>{suggestions[idx].reason}</div>
+                              {suggestions[idx].type === 'migrate' && (
+                                <button
+                                  onClick={() => fetchExplanation(p, idx, suggestions[idx])}
+                                  style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:4,cursor:'pointer',border:'none',
+                                    background:'#1455C0',color:'#fff',fontFamily:"'IBM Plex Sans',sans-serif",whiteSpace:'nowrap'
+                                  }}>
+                                  Move ↗
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </div>
                       );
                     })}
@@ -601,6 +768,53 @@ export default function TradingOS() {
                 ))}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* ══ MIGRATION MODAL ══ */}
+      {migrationModal && (
+        <div style={s.modalBg} onClick={e => e.target===e.currentTarget && setMigrationModal(null)}>
+          <div style={{...s.modal, width:460}}>
+            <div style={{fontSize:15,fontWeight:600,marginBottom:4}}>
+              Migration: {migrationModal.pos.ticker} → Engine {migrationModal.suggestion.to} ({E[migrationModal.suggestion.to]?.name})
+            </div>
+            <div style={{fontSize:12,color:'#6B7898',marginBottom:16}}>
+              Currently in Engine {migrationModal.suggestion.from} ({E[migrationModal.suggestion.from]?.name})
+            </div>
+
+            <div style={{background:'#F7F8FA',borderRadius:8,padding:'12px 14px',marginBottom:14}}>
+              <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:'.07em',color:'#A0ABBC',fontWeight:500,marginBottom:6}}>Trigger</div>
+              <div style={{fontSize:13,color:'#17202E'}}>{migrationModal.suggestion.reason}</div>
+            </div>
+
+            <div style={{background:'#F7F8FA',borderRadius:8,padding:'12px 14px',marginBottom:16,minHeight:80}}>
+              <div style={{fontSize:11,textTransform:'uppercase',letterSpacing:'.07em',color:'#A0ABBC',fontWeight:500,marginBottom:6}}>Analysis</div>
+              {loadingExplanation
+                ? <div style={{color:'#6B7898',fontSize:13}}>Claude is analyzing {migrationModal.pos.ticker}...</div>
+                : <div style={{fontSize:13,color:'#17202E',lineHeight:1.6}}>{migrationModal.explanation || migrationModal.suggestion.reason}</div>
+              }
+            </div>
+
+            {migrationModal.scoreResult && (
+              <div style={{display:'flex',gap:8,marginBottom:16}}>
+                {[{n:1,sc:migrationModal.scoreResult.e1},{n:2,sc:migrationModal.scoreResult.e2},{n:3,sc:migrationModal.scoreResult.e3}].map(({n,sc})=>(
+                  <div key={n} style={{flex:1,background:n===migrationModal.suggestion.to?E[n].bg:'#F7F8FA',border:`1px solid ${n===migrationModal.suggestion.to?E[n].border:'#E3E7EF'}`,borderRadius:7,padding:'8px 10px',textAlign:'center'}}>
+                    <div style={{fontSize:10,fontWeight:600,color:E[n].color,marginBottom:3}}>E{n}</div>
+                    <div style={{fontSize:18,fontWeight:600,fontFamily:"'IBM Plex Mono',monospace"}}>{sc}/10</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+              <button style={s.btnGhost} onClick={() => setMigrationModal(null)}>Cancel</button>
+              {migrationModal.suggestion.type === 'migrate' && (
+                <button style={s.btnPrimary} onClick={confirmMigration} disabled={loadingExplanation}>
+                  Confirm — Move to Engine {migrationModal.suggestion.to}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
