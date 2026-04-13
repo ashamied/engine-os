@@ -48,6 +48,7 @@ export default function TradingOS() {
   const [suggestions, setSuggestions] = useState({});
   const [migrationModal, setMigrationModal] = useState(null); // {pos, idx, suggestion, explanation}
   const [loadingExplanation, setLoadingExplanation] = useState(false);
+  const [marketStatus, setMarketStatus] = useState('');
 
   useEffect(() => { setPositions(loadPositions()); }, []);
 
@@ -63,8 +64,6 @@ export default function TradingOS() {
     // Mon-Fri, 4:00 AM - 8:00 PM EST (covers pre-market + after-hours)
     return day >= 1 && day <= 5 && timeNum >= 400 && timeNum <= 2000;
   };
-
-  const [marketStatus, setMarketStatus] = useState('');
 
   useEffect(() => {
     const checkAndSync = () => {
