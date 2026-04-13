@@ -94,12 +94,7 @@ export default function TradingOS() {
     } catch { setLiveStatus('offline'); }
   }, [positions]);
 
-  // Run migration engine whenever prices or positions update
-  useEffect(() => {
-    if (Object.keys(prices).length > 0 && positions.length > 0) {
-      runMigrationEngine(positions, prices);
-    }
-  }, [prices, positions]);
+
 
   const lp = ticker => prices[ticker]?.price || null;
 
@@ -204,6 +199,13 @@ export default function TradingOS() {
 
     setSuggestions(newSuggestions);
   };
+
+  // Run migration engine whenever prices or positions update
+  useEffect(() => {
+    if (Object.keys(prices).length > 0 && positions.length > 0) {
+      runMigrationEngine(positions, prices);
+    }
+  }, [prices, positions]);
 
   // ── Fetch modal price ────────────────────────────
   const fetchModalPrice = async () => {
