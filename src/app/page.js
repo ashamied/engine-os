@@ -38,6 +38,7 @@ export default function TradingOS() {
   const [form, setForm] = useState({ ticker:'', shares:'', cost:'', notes:'' });
   const [fetchedPrice, setFetchedPrice] = useState(null);
   const [fetchingPrice, setFetchingPrice] = useState(false);
+  const [manualPrice, setManualPrice] = useState('');
   const [caps, setCaps] = useState({ 1: 40000, 2: 28000, 3: 12000 });
   // Scorer
   const [scorerTicker, setScorerTicker] = useState('');
@@ -80,10 +81,10 @@ export default function TradingOS() {
     const shares = parseFloat(form.shares);
     const cost = parseFloat(form.cost);
     if (!ticker || !shares || !cost) { alert('Fill in ticker, shares and avg cost'); return; }
-    const price = fetchedPrice?.price || cost;
+    const price = fetchedPrice?.price || parseFloat(manualPrice) || cost;
     const next = [...positions, { ticker, shares, cost, price, notes: form.notes, engine: modal, added: Date.now() }];
     setPositions(next); savePositions(next);
-    setModal(null); setForm({ ticker:'', shares:'', cost:'', notes:'' }); setFetchedPrice(null);
+    setModal(null); setForm({ ticker:'', shares:'', cost:'', notes:'' }); setFetchedPrice(null); setManualPrice('');
   };
 
   const removePos = i => {
@@ -585,12 +586,15 @@ export default function TradingOS() {
               <div style={s.formGrp}><label style={s.formLbl}>Avg Cost (USD)</label><input style={s.formInp} type="number" step="0.01" placeholder="175.00" value={form.cost} onChange={e=>setForm(f=>({...f,cost:e.target.value}))} /></div>
               <div style={s.formGrp}>
                 <label style={s.formLbl}>Live Price</label>
-                <div style={{display:'flex',gap:6,alignItems:'center'}}>
-                  <div style={{...s.formInp,flex:1,color:fetchedPrice?.error?'#C0302A':fetchedPrice?'#0A7A52':'#A0ABBC',fontFamily:"'IBM Plex Mono',monospace"}}>
-                    {fetchingPrice?'Fetching...':fetchedPrice?.error?'Not found':fetchedPrice?'$'+fetchedPrice.price.toFixed(2)+'  '+( fetchedPrice.change>=0?'+':'')+fetchedPrice.change.toFixed(1)+'%':'—'}
+                <div style={{display:'flex',gap:6,alignItems:'center',marginBottom:4}}>
+                  <div style={{...s.formInp,flex:1,color:fetchedPrice?.error?'#C0302A':fetchedPrice&&fetchedPrice.price>0?'#0A7A52':'#A0ABBC',fontFamily:"'IBM Plex Mono',monospace"}}>
+                    {fetchingPrice?'Fetching...':fetchedPrice?.error?'Market closed / not found':fetchedPrice&&fetchedPrice.price>0?'$'+fetchedPrice.price.toFixed(2)+(fetchedPrice.change>=0?' +':' ')+fetchedPrice.change.toFixed(1)+'%':'—'}
                   </div>
-                  <button style={s.fetchBtn} onClick={fetchModalPrice} disabled={fetchingPrice}>Fetch ↓</button>
+                  <button style={s.fetchBtn} onClick={fetchModalPrice} disabled={fetchingPrice}>{fetchingPrice?'...':'Fetch ↓'}</button>
                 </div>
+                {(fetchedPrice?.error || (fetchedPrice && !fetchedPrice.price)) && (
+                  <input style={{...s.formInp,width:'100%',borderColor:'#EEC49A'}} type="number" step="0.01" placeholder="Enter price manually (market closed?)" value={manualPrice} onChange={e=>setManualPrice(e.target.value)} />
+                )}
               </div>
             </div>
             <div style={{marginBottom:10}}>
