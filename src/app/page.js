@@ -47,6 +47,37 @@ export default function TradingOS() {
 
   useEffect(() => { setPositions(loadPositions()); }, []);
 
+  // ── Auto-sync during market hours ───────────────
+  const isMarketOpen = () => {
+    const now = new Date();
+    const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+    const est = new Date(utc + (-5 * 3600000)); // EST (no DST adjustment needed for logic)
+    const day = est.getDay(); // 0=Sun, 6=Sat
+    const hour = est.getHours();
+    const min = est.getMinutes();
+    const timeNum = hour * 100 + min;
+    // Mon-Fri, 4:00 AM - 8:00 PM EST (covers pre-market + after-hours)
+    return day >= 1 && day <= 5 && timeNum >= 400 && timeNum <= 2000;
+  };
+
+  const [marketStatus, setMarketStatus] = useState('');
+
+  useEffect(() => {
+    const checkAndSync = () => {
+      if (isMarketOpen()) {
+        setMarketStatus('');
+        syncPrices();
+      } else {
+        setMarketStatus('Market closed');
+      }
+    };
+    // Initial check
+    checkAndSync();
+    // Check every 90 seconds
+    const interval = setInterval(checkAndSync, 90000);
+    return () => clearInterval(interval);
+  }, [syncPrices]);
+
   // ── Prices ──────────────────────────────────────
   const syncPrices = useCallback(async () => {
     const tickers = [...new Set([...positions.map(p => p.ticker), ...MY_TICKERS])].join(',');
@@ -247,6 +278,7 @@ export default function TradingOS() {
             <div style={s.liveDot(liveStatus)}></div>
             <span>{liveStatus==='live'?'Live — Massive':liveStatus==='syncing'?'Syncing...':'Offline'}</span>
           </div>
+          {marketStatus && <span style={{fontSize:11,color:'#B05A00',background:'#FDF3E8',border:'1px solid #EEC49A',borderRadius:4,padding:'3px 8px'}}>{marketStatus}</span>}
           <button style={s.syncBtn} onClick={syncPrices}>↻ Sync All</button>
         </div>
       </div>
