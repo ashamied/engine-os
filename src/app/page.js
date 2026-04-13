@@ -1,7 +1,7 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
 
-const VERSION = 'v1.1';
+const VERSION = 'v1.2.0';
 const STORE = 'engine_os_v1';
 const CATALYSTS = [
   { date: '2026-04-28', ticker: 'META',  desc: 'Q1 Earnings',    engine: 2 },
@@ -67,13 +67,14 @@ export default function TradingOS() {
 
   const isMarketOpen = () => {
     const now = new Date();
-    const utc = now.getTime() + now.getTimezoneOffset() * 60000;
-    const est = new Date(utc + (-5 * 3600000)); // EST (no DST adjustment needed for logic)
+    // Get proper EST/EDT time using Intl API — handles DST automatically
+    const estStr = now.toLocaleString('en-US', { timeZone: 'America/New_York' });
+    const est = new Date(estStr);
     const day = est.getDay(); // 0=Sun, 6=Sat
     const hour = est.getHours();
     const min = est.getMinutes();
     const timeNum = hour * 100 + min;
-    // Mon-Fri, 4:00 AM - 8:00 PM EST (covers pre-market + after-hours)
+    // Mon-Fri, 4:00 AM - 8:00 PM New York time (pre-market + after-hours)
     return day >= 1 && day <= 5 && timeNum >= 400 && timeNum <= 2000;
   };
 
@@ -429,11 +430,25 @@ export default function TradingOS() {
           </div>
           <span style={{
             fontSize:11, fontWeight:600, padding:'3px 10px', borderRadius:4,
-            background: liveStatus==='live' ? '#ECF8F4' : marketStatus==='' ? '#ECF8F4' : '#FDF3E8',
-            color: liveStatus==='live' ? '#0A7A52' : marketStatus==='' ? '#0A7A52' : '#B05A00',
-            border: `1px solid ${liveStatus==='live' ? '#A8DFC9' : marketStatus==='' ? '#A8DFC9' : '#EEC49A'}`
+            background: isMarketOpen() ? '#ECF8F4' : '#FDF3E8',
+            color: isMarketOpen() ? '#0A7A52' : '#B05A00',
+            border: `1px solid ${isMarketOpen() ? '#A8DFC9' : '#EEC49A'}`
           }}>
-            {liveStatus==='live' ? '● Market Open' : marketStatus ? '○ ' + marketStatus : '○ Checking...'}
+            {(() => {
+              const now = new Date();
+              const estStr = now.toLocaleString('en-US', {timeZone:'America/New_York'});
+              const est = new Date(estStr);
+              const day = est.getDay();
+              const h = est.getHours();
+              const m = est.getMinutes();
+              const timeNum = h * 100 + m;
+              if(day === 0 || day === 6) return '○ Opens Mon 9:30AM EST';
+              if(timeNum < 400) return '○ Pre-market opens ' + (4-h) + 'h';
+              if(timeNum >= 400 && timeNum < 930) return '◑ Pre-market Open';
+              if(timeNum >= 930 && timeNum < 1600) return '● Market Open';
+              if(timeNum >= 1600 && timeNum < 2000) return '◑ After-hours';
+              return '○ Market Closed';
+            })()}
           </span>
           <button style={s.syncBtn} onClick={syncPrices}>↻ Sync All</button>
         </div>
